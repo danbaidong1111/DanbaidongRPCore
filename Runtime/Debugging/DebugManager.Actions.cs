@@ -1,9 +1,10 @@
 #if ENABLE_INPUT_SYSTEM && ENABLE_INPUT_SYSTEM_PACKAGE
-    #define USE_INPUT_SYSTEM
-    using UnityEngine.InputSystem;
-    using UnityEngine.InputSystem.Controls;
+#define USE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
 #endif
 
+using System;
 using System.Collections.Generic;
 
 namespace UnityEngine.Rendering
@@ -30,17 +31,17 @@ namespace UnityEngine.Rendering
 
     public sealed partial class DebugManager
     {
-        const string kEnableDebugBtn1  = "Enable Debug Button 1";
-        const string kEnableDebugBtn2  = "Enable Debug Button 2";
+        const string kEnableDebugBtn1 = "Enable Debug Button 1";
+        const string kEnableDebugBtn2 = "Enable Debug Button 2";
         const string kDebugPreviousBtn = "Debug Previous";
-        const string kDebugNextBtn     = "Debug Next";
-        const string kValidateBtn      = "Debug Validate";
-        const string kPersistentBtn    = "Debug Persistent";
-        const string kDPadVertical     = "Debug Vertical";
-        const string kDPadHorizontal   = "Debug Horizontal";
-        const string kMultiplierBtn    = "Debug Multiplier";
-        const string kResetBtn         = "Debug Reset";
-        const string kEnableDebug      = "Enable Debug";
+        const string kDebugNextBtn = "Debug Next";
+        const string kValidateBtn = "Debug Validate";
+        const string kPersistentBtn = "Debug Persistent";
+        const string kDPadVertical = "Debug Vertical";
+        const string kDPadHorizontal = "Debug Horizontal";
+        const string kMultiplierBtn = "Debug Multiplier";
+        const string kResetBtn = "Debug Reset";
+        const string kEnableDebug = "Enable Debug";
 
         DebugActionDesc[] m_DebugActions;
         DebugActionState[] m_DebugActionStates;
@@ -140,7 +141,10 @@ namespace UnityEngine.Rendering
             moveHorizontal.repeatMode = DebugActionRepeatMode.Delay;
             moveHorizontal.repeatDelay = 0.16f;
             AddAction(DebugAction.MoveHorizontal, moveHorizontal);
+        }
 
+        internal void EnableInputActions()
+        {
 #if USE_INPUT_SYSTEM
             foreach (var action in debugActionMap)
                 action.Enable();
@@ -159,7 +163,7 @@ namespace UnityEngine.Rendering
             var desc = m_DebugActions[actionIndex];
             var state = m_DebugActionStates[actionIndex];
 
-// Disable all input events if we're using the new input system
+            // Disable all input events if we're using the new input system
 #if USE_INPUT_SYSTEM
             if (state.runningAction == false)
             {
@@ -180,11 +184,19 @@ namespace UnityEngine.Rendering
                     var buttons = desc.buttonTriggerList[buttonListIndex];
                     bool allButtonPressed = true;
 
-                    foreach (var button in buttons)
+                    try
                     {
-                        allButtonPressed = Input.GetButton(button);
-                        if (!allButtonPressed)
-                            break;
+                        foreach (var button in buttons)
+                        {
+                            allButtonPressed = Input.GetButton(button);
+                            if (!allButtonPressed)
+                                break;
+                        }
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Exception thrown if the input mapping gets removed while in play mode (UUM-37148)
+                        allButtonPressed = false;
                     }
 
                     if (allButtonPressed)
@@ -197,10 +209,17 @@ namespace UnityEngine.Rendering
                 // Check axis triggers
                 if (desc.axisTrigger != "")
                 {
-                    float axisValue = Input.GetAxis(desc.axisTrigger);
+                    try
+                    {
+                        float axisValue = Input.GetAxis(desc.axisTrigger);
 
-                    if (axisValue != 0f)
-                        state.TriggerWithAxis(desc.axisTrigger, axisValue);
+                        if (axisValue != 0f)
+                            state.TriggerWithAxis(desc.axisTrigger, axisValue);
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Exception thrown if the input mapping gets removed while in play mode (UUM-37148)
+                    }
                 }
 
                 // Check key triggers
@@ -209,11 +228,20 @@ namespace UnityEngine.Rendering
                     bool allKeyPressed = true;
 
                     var keys = desc.keyTriggerList[keyListIndex];
-                    foreach (var key in keys)
+
+                    try
                     {
-                        allKeyPressed = Input.GetKey(key);
-                        if (!allKeyPressed)
-                            break;
+                        foreach (var key in keys)
+                        {
+                            allKeyPressed = Input.GetKey(key);
+                            if (!allKeyPressed)
+                                break;
+                        }
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Exception thrown if the input mapping gets removed while in play mode (UUM-37148)
+                        allKeyPressed = false;
                     }
 
                     if (allKeyPressed)
@@ -248,6 +276,47 @@ namespace UnityEngine.Rendering
         internal float GetAction(DebugAction action)
         {
             return m_DebugActionStates[(int)action].actionState;
+        }
+
+        internal bool GetActionToggleDebugMenuWithTouch()
+        {
+#if USE_INPUT_SYSTEM
+            if (!EnhancedTouchSupport.enabled)
+                return false;
+
+            var touches = InputSystem.EnhancedTouch.Touch.activeTouches;
+            var touchCount = touches.Count;
+            InputSystem.TouchPhase? expectedTouchPhase = null;
+#else
+            var touchCount = Input.touchCount;
+            TouchPhase? expectedTouchPhase = TouchPhase.Began;
+#endif
+            if (touchCount == 3)
+            {
+#if !USE_INPUT_SYSTEM
+                var touches = Input.touches; // Causes an allocation, which is why this is inside the condition
+#endif
+                foreach (var touch in touches)
+                {
+                    // Gesture: 3-finger double-tap
+                    if ((!expectedTouchPhase.HasValue || touch.phase == expectedTouchPhase.Value) && touch.tapCount == 2)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal bool GetActionReleaseScrollTarget()
+        {
+#if USE_INPUT_SYSTEM
+            bool mouseWheelActive = Mouse.current != null && Mouse.current.scroll.ReadValue() != Vector2.zero;
+            bool touchSupported = Touchscreen.current != null;
+#else
+            bool mouseWheelActive = Input.mouseScrollDelta != Vector2.zero;
+            bool touchSupported = Input.touchSupported;
+#endif
+            return mouseWheelActive || touchSupported; // Touchscreens have general problems with scrolling, so it's disabled.
         }
 
         void RegisterInputs()
@@ -378,6 +447,7 @@ namespace UnityEngine.Rendering
             inputAction = action;
             Trigger(action.bindings.Count, state);
         }
+
 #else
         public void TriggerWithButton(string[] buttons, float state)
         {
@@ -401,6 +471,7 @@ namespace UnityEngine.Rendering
             m_PressedAxis = "";
             Trigger(keys.Length, state);
         }
+
 #endif
 
         void Reset()

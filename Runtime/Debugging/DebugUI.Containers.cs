@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+
 namespace UnityEngine.Rendering
 {
     public partial class DebugUI
@@ -7,6 +11,9 @@ namespace UnityEngine.Rendering
         /// </summary>
         public class Container : Widget, IContainer
         {
+            const string k_IDToken = "#";
+            internal bool hideDisplayName => string.IsNullOrEmpty(displayName) || displayName.StartsWith(k_IDToken);
+
             /// <summary>
             /// List of children.
             /// </summary>
@@ -20,11 +27,16 @@ namespace UnityEngine.Rendering
                 get { return m_Panel; }
                 internal set
                 {
+                    /// Frequenlty used panels do now own widgets
+                    if (value != null && value.flags.HasFlag(DebugUI.Flags.FrequentlyUsed))
+                        return;
+
                     m_Panel = value;
 
                     // Bubble down
-                    foreach (var child in children)
-                        child.panel = value;
+                    int numChildren = children.Count;
+                    for (int i = 0; i < numChildren; i++)
+                        children[i].panel = value;
                 }
             }
 
@@ -32,11 +44,17 @@ namespace UnityEngine.Rendering
             /// Constructor
             /// </summary>
             public Container()
+                : this(string.Empty, new ObservableList<Widget>())
             {
-                displayName = "";
-                children = new ObservableList<Widget>();
-                children.ItemAdded += OnItemAdded;
-                children.ItemRemoved += OnItemRemoved;
+            }
+
+            /// <summary>
+            /// Constructor for a container without header
+            /// </summary>
+            /// <param name="id">The id of the container</param>
+            public Container(string id)
+                : this($"{k_IDToken}{id}", new ObservableList<Widget>())
+            {
             }
 
             /// <summary>
@@ -50,14 +68,19 @@ namespace UnityEngine.Rendering
                 this.children = children;
                 children.ItemAdded += OnItemAdded;
                 children.ItemRemoved += OnItemRemoved;
+
+                // Call OnAdded callback for already existing items to ensure their panel & parent are set
+                for (int i = 0; i < this.children.Count; i++)
+                    OnItemAdded(this.children, new ListChangedEventArgs<Widget>(i, this.children[i]));
             }
 
             internal override void GenerateQueryPath()
             {
                 base.GenerateQueryPath();
 
-                foreach (var child in children)
-                    child.GenerateQueryPath();
+                int numChildren = children.Count;
+                for (int i = 0; i < numChildren; i++)
+                    children[i].GenerateQueryPath();
             }
 
             /// <summary>
@@ -102,9 +125,11 @@ namespace UnityEngine.Rendering
             {
                 int hash = 17;
                 hash = hash * 23 + queryPath.GetHashCode();
+                hash = hash * 23 + isHidden.GetHashCode();
 
-                foreach (var child in children)
-                    hash = hash * 23 + child.GetHashCode();
+                int numChildren = children.Count;
+                for (int i = 0; i < numChildren; i++)
+                    hash = hash * 23 + children[i].GetHashCode();
 
                 return hash;
             }
@@ -116,6 +141,22 @@ namespace UnityEngine.Rendering
         public class Foldout : Container, IValueField
         {
             /// <summary>
+            /// Context menu item.
+            /// </summary>
+            public struct ContextMenuItem
+            {
+                /// <summary>
+                /// Name of the item displayed in context menu dropdown.
+                /// </summary>
+                public string displayName;
+
+                /// <summary>
+                /// Callback when context menu item is selected.
+                /// </summary>
+                public Action action;
+            }
+
+            /// <summary>
             /// Always false.
             /// </summary>
             public bool isReadOnly { get { return false; } }
@@ -126,9 +167,24 @@ namespace UnityEngine.Rendering
             public bool opened;
 
             /// <summary>
+            /// Draw the foldout in full width using a header style.
+            /// </summary>
+            public bool isHeader;
+
+            /// <summary>
+            /// Optional list of context menu items. If the list is not provided, no context menu button will be displayed.
+            /// </summary>
+            public List<ContextMenuItem> contextMenuItems = null;
+
+            /// <summary>
             /// List of columns labels.
             /// </summary>
             public string[] columnLabels { get; set; } = null;
+
+            /// <summary>
+            /// List of columns label tooltips.
+            /// </summary>
+            public string[] columnTooltips { get; set; } = null;
 
             /// <summary>
             /// Constructor.
@@ -140,10 +196,12 @@ namespace UnityEngine.Rendering
             /// <param name="displayName">Display name of the foldout.</param>
             /// <param name="children">List of attached children.</param>
             /// <param name="columnLabels">Optional list of column names.</param>
-            public Foldout(string displayName, ObservableList<Widget> children, string[] columnLabels = null)
+            /// <param name="columnTooltips">Optional list of tooltips for column name labels.</param>
+            public Foldout(string displayName, ObservableList<Widget> children, string[] columnLabels = null, string[] columnTooltips = null)
                 : base(displayName, children)
             {
                 this.columnLabels = columnLabels;
+                this.columnTooltips = columnTooltips;
             }
 
             /// <summary>

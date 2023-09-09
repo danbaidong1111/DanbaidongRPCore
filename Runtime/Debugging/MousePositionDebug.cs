@@ -1,7 +1,7 @@
 #if ENABLE_INPUT_SYSTEM && ENABLE_INPUT_SYSTEM_PACKAGE
-    #define USE_INPUT_SYSTEM
-    using UnityEngine.InputSystem;
-    using UnityEngine.InputSystem.Controls;
+#define USE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 #endif
 
 using UnityEditor;
@@ -140,19 +140,19 @@ namespace UnityEngine.Rendering
 #endif
         }
 
-       /// <summary>
-       /// Get the mouse position in the scene or game view.
-       /// </summary>
-       /// <param name="ScreenHeight">Window height.</param>
-       /// <param name="sceneView">Get position in the scene view?</param>
-       /// <returns>Coordinates of the mouse in the specified window.</returns>
+        /// <summary>
+        /// Get the mouse position in the scene or game view.
+        /// </summary>
+        /// <param name="ScreenHeight">Window height.</param>
+        /// <param name="sceneView">Get position in the scene view?</param>
+        /// <returns>Coordinates of the mouse in the specified window.</returns>
         public Vector2 GetMousePosition(float ScreenHeight, bool sceneView)
         {
 #if UNITY_EDITOR
             if (sceneView)
             {
                 // In play mode, m_mousePosition the one in the scene view
-                Vector2 mousePixelCoord = m_mousePosition;
+                Vector2 mousePixelCoord = EditorGUIUtility.PointsToPixels(m_mousePosition);
                 mousePixelCoord.y = (ScreenHeight - 1.0f) - mousePixelCoord.y;
                 return mousePixelCoord;
             }
@@ -194,7 +194,7 @@ namespace UnityEngine.Rendering
         public Vector2 GetMouseClickPosition(float ScreenHeight)
         {
 #if UNITY_EDITOR
-            Vector2 mousePixelCoord = m_MouseClickPosition;
+            Vector2 mousePixelCoord = EditorGUIUtility.PointsToPixels(m_MouseClickPosition);
             mousePixelCoord.y = (ScreenHeight - 1.0f) - mousePixelCoord.y;
             return mousePixelCoord;
 #else

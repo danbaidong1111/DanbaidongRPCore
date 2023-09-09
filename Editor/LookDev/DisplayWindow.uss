@@ -41,7 +41,7 @@
 
 #environmentContainer
 {
-	width: 0px;
+    width: 0px;
     visibility: hidden;
     flex-direction: column-reverse;
     border-color: #232323;
@@ -50,7 +50,7 @@
 
 #debugContainer
 {
-	width: 0px;
+    width: 0px;
     visibility: hidden;
     border-color: #232323;
     border-left-width: 1px;
@@ -64,13 +64,13 @@
 
 .showEnvironmentPanel > #environmentContainer
 {
-	width: 255px;
+    width: 255px;
     visibility: visible;
 }
 
 .showDebugPanel > #debugContainer
 {
-	width: 256px; /*219px;*/
+    width: 256px; /*219px;*/
     visibility: visible;
 }
 
@@ -321,7 +321,7 @@ MultipleSourcePopupField > MultipleDifferentValue:hover
     padding: 2px;
 }
 
-#tabsRadio 
+#tabsRadio
 {
     width: 256px;
     min-width: 256px;

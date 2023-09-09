@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -8,20 +9,72 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Value Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.Value))]
-    public sealed class DebugUIDrawerValue : DebugUIDrawer
+    public sealed class DebugUIDrawerValue : DebugUIWidgetDrawer<DebugUI.Value>
     {
         /// <summary>
-        /// OnGUI implementation for Value DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The widget</param>
+        protected override void DoGUI(Rect rect, GUIContent label, DebugUI.Value field)
         {
-            var w = Cast<DebugUI.Value>(widget);
-            var rect = PrepareControlRect();
-            EditorGUI.LabelField(rect, EditorGUIUtility.TrTextContent(w.displayName), EditorGUIUtility.TrTextContent(w.GetValue().ToString()));
-            return true;
+            EditorGUI.LabelField(rect, label, EditorGUIUtility.TrTextContent(field.FormatString(field.GetValue())));
+        }
+    }
+
+    /// <summary>
+    /// Builtin Drawer for ValueTuple Debug Items.
+    /// </summary>
+    [DebugUIDrawer(typeof(DebugUI.ValueTuple))]
+    public sealed class DebugUIDrawerValueTuple : DebugUIWidgetDrawer<DebugUI.ValueTuple>
+    {
+        /// <summary>
+        /// Does the field of the given type
+        /// </summary>
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The widget</param>
+        protected override void DoGUI(Rect rect, GUIContent label, DebugUI.ValueTuple field)
+        {
+            var labelRect = PrepareControlRect();
+            EditorGUI.PrefixLabel(labelRect, label);
+
+            // Following layout should match DebugUIDrawerFoldout to make column labels align
+            Rect drawRect = GUILayoutUtility.GetLastRect();
+
+            int indent = EditorGUI.indentLevel;
+            EditorGUI.indentLevel = 0; //be at left of rects
+            for (int i = 0; i < field.numElements; i++)
+            {
+                var columnRect = drawRect;
+                columnRect.x += EditorGUIUtility.labelWidth + i * DebugWindow.Styles.foldoutColumnWidth;
+                columnRect.width = DebugWindow.Styles.foldoutColumnWidth;
+                var value = field.values[i].GetValue();
+                EditorGUI.LabelField(columnRect, field.values[i].FormatString(value));
+            }
+            EditorGUI.indentLevel = indent;
+        }
+    }
+
+    /// <summary>
+    /// Builtin Drawer for ProgressBarValue Debug Items.
+    /// </summary>
+    [DebugUIDrawer(typeof(DebugUI.ProgressBarValue))]
+    public sealed class DebugUIDrawerProgressBarValue : DebugUIWidgetDrawer<DebugUI.ProgressBarValue>
+    {
+        /// <summary>
+        /// Does the field of the given type
+        /// </summary>
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The widget</param>
+        protected override void DoGUI(Rect rect, GUIContent label, DebugUI.ProgressBarValue field)
+        {
+            var labelRect = PrepareControlRect();
+            var progressBarRect = EditorGUI.PrefixLabel(labelRect, label);
+            float value = (float)field.GetValue();
+            EditorGUI.ProgressBar(progressBarRect, value, field.FormatString(value));
         }
     }
 
@@ -29,26 +82,22 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Button Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.Button))]
-    public sealed class DebugUIDrawerButton : DebugUIDrawer
+    public sealed class DebugUIDrawerButton : DebugUIWidgetDrawer<DebugUI.Button>
     {
         /// <summary>
-        /// OnGUI implementation for Button DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The widget</param>
+        protected override void DoGUI(Rect rect, GUIContent label, DebugUI.Button field)
         {
-            var w = Cast<DebugUI.Button>(widget);
-
-            var rect = EditorGUI.IndentedRect(EditorGUILayout.GetControlRect());
-            if (GUI.Button(rect, w.displayName, EditorStyles.miniButton))
+            rect = EditorGUI.IndentedRect(rect);
+            if (GUI.Button(rect, label, EditorStyles.miniButton))
             {
-                if (w.action != null)
-                    w.action();
+                if (field.action != null)
+                    field.action();
             }
-
-            return true;
         }
     }
 
@@ -56,28 +105,19 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Boolean Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.BoolField))]
-    public sealed class DebugUIDrawerBoolField : DebugUIDrawer
+    public sealed class DebugUIDrawerBoolField : DebugUIFieldDrawer<bool, DebugUI.BoolField, DebugStateBool>
     {
         /// <summary>
-        /// OnGUI implementation for Boolean DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The value</returns>
+        protected override bool DoGUI(Rect rect, GUIContent label, DebugUI.BoolField field, DebugStateBool state)
         {
-            var w = Cast<DebugUI.BoolField>(widget);
-            var s = Cast<DebugStateBool>(state);
-
-            EditorGUI.BeginChangeCheck();
-
-            var rect = PrepareControlRect();
-            bool value = EditorGUI.Toggle(rect, EditorGUIUtility.TrTextContent(w.displayName), w.GetValue());
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return EditorGUI.Toggle(rect, label, field.GetValue());
         }
     }
 
@@ -85,47 +125,39 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for History Boolean Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.HistoryBoolField))]
-    public sealed class DebugUIDrawerHistoryBoolField : DebugUIDrawer
+    public sealed class DebugUIDrawerHistoryBoolField : DebugUIFieldDrawer<bool, DebugUI.HistoryBoolField, DebugStateBool>
     {
         /// <summary>
-        /// OnGUI implementation for History Boolean DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override bool DoGUI(Rect rect, GUIContent label, DebugUI.HistoryBoolField field, DebugStateBool state)
         {
-            var w = Cast<DebugUI.HistoryBoolField>(widget);
-            var s = Cast<DebugStateBool>(state);
-
-            EditorGUI.BeginChangeCheck();
-
-            var rect = PrepareControlRect();
             var labelRect = rect;
             labelRect.width = EditorGUIUtility.labelWidth;
             const int oneValueWidth = 70;
-            var valueRects = new Rect[w.historyDepth + 1];
-            for(int i = 0; i < w.historyDepth + 1; i++)
+            var valueRects = new Rect[field.historyDepth + 1];
+            for (int i = 0; i < field.historyDepth + 1; i++)
             {
                 valueRects[i] = rect;
                 valueRects[i].x += EditorGUIUtility.labelWidth + i * oneValueWidth;
                 valueRects[i].width = oneValueWidth;
             }
-            EditorGUI.LabelField(labelRect, EditorGUIUtility.TrTextContent(w.displayName));
+            EditorGUI.LabelField(labelRect, label);
             int indent = EditorGUI.indentLevel;
             EditorGUI.indentLevel = 0; //be at left of rects
-            bool value = EditorGUI.Toggle(valueRects[0], w.GetValue());
+            bool value = EditorGUI.Toggle(valueRects[0], field.GetValue());
             using (new EditorGUI.DisabledScope(true))
             {
-                for (int i = 0; i < w.historyDepth; i++)
-                    EditorGUI.Toggle(valueRects[i + 1], w.GetHistoryValue(i));
+                for (int i = 0; i < field.historyDepth; i++)
+                    EditorGUI.Toggle(valueRects[i + 1], field.GetHistoryValue(i));
             }
             EditorGUI.indentLevel = indent;
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return value;
         }
     }
 
@@ -133,30 +165,21 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Integer Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.IntField))]
-    public sealed class DebugUIDrawerIntField : DebugUIDrawer
+    public sealed class DebugUIDrawerIntField : DebugUIFieldDrawer<int, DebugUI.IntField, DebugStateInt>
     {
         /// <summary>
-        /// OnGUI implementation for Integer DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override int DoGUI(Rect rect, GUIContent label, DebugUI.IntField field, DebugStateInt state)
         {
-            var w = Cast<DebugUI.IntField>(widget);
-            var s = Cast<DebugStateInt>(state);
-
-            EditorGUI.BeginChangeCheck();
-
-            var rect = PrepareControlRect();
-            int value = w.min != null && w.max != null
-                ? EditorGUI.IntSlider(rect, EditorGUIUtility.TrTextContent(w.displayName), w.GetValue(), w.min(), w.max())
-                : EditorGUI.IntField(rect, EditorGUIUtility.TrTextContent(w.displayName), w.GetValue());
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return field.min != null && field.max != null
+                ? EditorGUI.IntSlider(rect, label, field.GetValue(), field.min(), field.max())
+                : EditorGUI.IntField(rect, label, field.GetValue());
         }
     }
 
@@ -164,33 +187,24 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Unsigned Integer Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.UIntField))]
-    public sealed class DebugUIDrawerUIntField : DebugUIDrawer
+    public sealed class DebugUIDrawerUIntField : DebugUIFieldDrawer<uint, DebugUI.UIntField, DebugStateUInt>
     {
         /// <summary>
-        /// OnGUI implementation for Unsigned Integer DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override uint DoGUI(Rect rect, GUIContent label, DebugUI.UIntField field, DebugStateUInt state)
         {
-            var w = Cast<DebugUI.UIntField>(widget);
-            var s = Cast<DebugStateUInt>(state);
-
-            EditorGUI.BeginChangeCheck();
-
             // No UIntField so we need to max to 0 ourselves or the value will wrap around
-            var rect = PrepareControlRect();
-            int tmp = w.min != null && w.max != null
-                ? EditorGUI.IntSlider(rect, EditorGUIUtility.TrTextContent(w.displayName), Mathf.Max(0, (int)w.GetValue()), Mathf.Max(0, (int)w.min()), Mathf.Max(0, (int)w.max()))
-                : EditorGUI.IntField(rect, EditorGUIUtility.TrTextContent(w.displayName), Mathf.Max(0, (int)w.GetValue()));
+            int tmp = field.min != null && field.max != null
+                ? EditorGUI.IntSlider(rect, label, Mathf.Max(0, (int)field.GetValue()), Mathf.Max(0, (int)field.min()), Mathf.Max(0, (int)field.max()))
+                : EditorGUI.IntField(rect, label, Mathf.Max(0, (int)field.GetValue()));
 
-            uint value = (uint)Mathf.Max(0, tmp);
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return (uint)Mathf.Max(0, tmp);
         }
     }
 
@@ -198,30 +212,21 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Float Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.FloatField))]
-    public sealed class DebugUIDrawerFloatField : DebugUIDrawer
+    public sealed class DebugUIDrawerFloatField : DebugUIFieldDrawer<float, DebugUI.FloatField, DebugStateFloat>
     {
         /// <summary>
-        /// OnGUI implementation for Float DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override float DoGUI(Rect rect, GUIContent label, DebugUI.FloatField field, DebugStateFloat state)
         {
-            var w = Cast<DebugUI.FloatField>(widget);
-            var s = Cast<DebugStateFloat>(state);
-
-            EditorGUI.BeginChangeCheck();
-
-            var rect = PrepareControlRect();
-            float value = w.min != null && w.max != null
-                ? EditorGUI.Slider(rect, EditorGUIUtility.TrTextContent(w.displayName), w.GetValue(), w.min(), w.max())
-                : EditorGUI.FloatField(rect, EditorGUIUtility.TrTextContent(w.displayName), w.GetValue());
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return field.min != null && field.max != null
+                ? EditorGUI.Slider(rect, label, field.GetValue(), field.min(), field.max())
+                : EditorGUI.FloatField(rect, label, field.GetValue());
         }
     }
 
@@ -229,52 +234,75 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Enum Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.EnumField))]
-    public sealed class DebugUIDrawerEnumField : DebugUIDrawer
+    public sealed class DebugUIDrawerEnumField : DebugUIFieldDrawer<int, DebugUI.EnumField, DebugStateEnum>
     {
         /// <summary>
-        /// OnGUI implementation for Enum DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override int DoGUI(Rect rect, GUIContent label, DebugUI.EnumField field, DebugStateEnum state)
         {
-            var w = Cast<DebugUI.EnumField>(widget);
-            var s = Cast<DebugStateInt>(state);
+            int index = Mathf.Max(0, field.currentIndex); // Fallback just in case, we may be handling sub/sectioned enums here
+            int value = field.GetValue();
 
-            if (w.indexes == null)
-                w.InitIndexes();
-
-            EditorGUI.BeginChangeCheck();
-
-            int index = -1;
-            int value = w.GetValue();
-            if (w.enumNames == null || w.enumValues == null)
+            if (field.enumNames == null || field.enumValues == null)
             {
-                EditorGUILayout.LabelField("Can't draw an empty enumeration.");
+                EditorGUI.LabelField(rect, label, "Can't draw an empty enumeration.");
+            }
+            else if (field.enumNames.Length != field.enumValues.Length)
+            {
+                EditorGUI.LabelField(rect, label, "Invalid data");
             }
             else
             {
-                var rect = PrepareControlRect();
-
-                index = w.currentIndex;
-
-                // Fallback just in case, we may be handling sub/sectionned enums here
-                if (index < 0)
-                    index = 0;
-
-                index = EditorGUI.IntPopup(rect, EditorGUIUtility.TrTextContent(w.displayName), index, w.enumNames, w.indexes);
-                value = w.enumValues[index];
+                index = EditorGUI.IntPopup(rect, label, index, field.enumNames, field.indexes);
+                value = field.enumValues[index];
             }
 
-            if (EditorGUI.EndChangeCheck())
+            return value;
+        }
+    }
+
+    /// <summary>
+    /// Builtin Drawer for Object Popup Fields Items.
+    /// </summary>
+    [DebugUIDrawer(typeof(DebugUI.ObjectPopupField))]
+    public sealed class DebugUIDrawerObjectPopupField : DebugUIFieldDrawer<UnityEngine.Object, DebugUI.ObjectPopupField, DebugStateObject>
+    {
+        /// <summary>
+        /// Does the field of the given type
+        /// </summary>
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override UnityEngine.Object DoGUI(Rect rect, GUIContent label, DebugUI.ObjectPopupField field, DebugStateObject state)
+        {
+            var selectedValue = field.GetValue();
+
+            rect = EditorGUI.PrefixLabel(rect, label);
+
+            var elements = field.getObjects();
+            if (elements?.Any() ?? false)
             {
-                Apply(w, s, value);
-                if (index > -1)
-                    w.currentIndex = index;
+                var elementsArrayNames = elements.Select(e => e.name).ToArray();
+                var elementsArrayIndices = Enumerable.Range(0, elementsArrayNames.Length).ToArray();
+                var selectedIndex = selectedValue != null ? Array.IndexOf(elementsArrayNames, selectedValue.name) : 0;
+                var newSelectedIndex = EditorGUI.IntPopup(rect, selectedIndex, elementsArrayNames, elementsArrayIndices);
+                if (selectedIndex != newSelectedIndex)
+                    selectedValue = elements.ElementAt(newSelectedIndex);
+            }
+            else
+            {
+                EditorGUI.LabelField(rect, "Can't draw an empty enumeration.");
             }
 
-            return true;
+            return selectedValue;
         }
     }
 
@@ -282,34 +310,27 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for History Enum Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.HistoryEnumField))]
-    public sealed class DebugUIDrawerHistoryEnumField : DebugUIDrawer
+    public sealed class DebugUIDrawerHistoryEnumField : DebugUIFieldDrawer<int, DebugUI.HistoryEnumField, DebugStateEnum>
     {
         /// <summary>
-        /// OnGUI implementation for History Enum DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override int DoGUI(Rect rect, GUIContent label, DebugUI.HistoryEnumField field, DebugStateEnum state)
         {
-            var w = Cast<DebugUI.HistoryEnumField>(widget);
-            var s = Cast<DebugStateInt>(state);
-
-            if (w.indexes == null)
-                w.InitIndexes();
-
-            EditorGUI.BeginChangeCheck();
-
             int index = -1;
-            int value = w.GetValue();
-            if (w.enumNames == null || w.enumValues == null)
+            int value = field.GetValue();
+            if (field.enumNames == null || field.enumValues == null)
             {
                 EditorGUILayout.LabelField("Can't draw an empty enumeration.");
             }
             else
             {
-                var rect = PrepareControlRect();
-                index = w.currentIndex;
+                index = field.currentIndex;
 
                 // Fallback just in case, we may be handling sub/sectionned enums here
                 if (index < 0)
@@ -318,34 +339,29 @@ namespace UnityEditor.Rendering
                 var labelRect = rect;
                 labelRect.width = EditorGUIUtility.labelWidth;
                 const int oneValueWidth = 70;
-                var valueRects = new Rect[w.historyDepth + 1];
-                for (int i = 0; i < w.historyDepth + 1; i++)
+                var valueRects = new Rect[field.historyDepth + 1];
+                for (int i = 0; i < field.historyDepth + 1; i++)
                 {
                     valueRects[i] = rect;
                     valueRects[i].x += EditorGUIUtility.labelWidth + i * oneValueWidth;
                     valueRects[i].width = oneValueWidth;
                 }
-                EditorGUI.LabelField(labelRect, EditorGUIUtility.TrTextContent(w.displayName));
+                EditorGUI.LabelField(labelRect, label);
                 int indent = EditorGUI.indentLevel;
                 EditorGUI.indentLevel = 0; //be at left of rects
-                index = EditorGUI.IntPopup(valueRects[0], index, w.enumNames, w.indexes);
-                value = w.enumValues[index];
+                index = EditorGUI.IntPopup(valueRects[0], index, field.enumNames, field.indexes);
+                value = field.enumValues[index];
                 using (new EditorGUI.DisabledScope(true))
                 {
-                    for (int i = 0; i < w.historyDepth; i++)
-                        EditorGUI.IntPopup(valueRects[i + 1], w.GetHistoryValue(i), w.enumNames, w.indexes);
+                    for (int i = 0; i < field.historyDepth; i++)
+                        EditorGUI.IntPopup(valueRects[i + 1], field.GetHistoryValue(i), field.enumNames, field.indexes);
                 }
                 EditorGUI.indentLevel = indent;
+
+                value = field.enumValues[index];
             }
 
-            if (EditorGUI.EndChangeCheck())
-            {
-                Apply(w, s, value);
-                if (index > -1)
-                    w.currentIndex = index;
-            }
-
-            return true;
+            return value;
         }
     }
 
@@ -353,34 +369,28 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Bitfield Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.BitField))]
-    public sealed class DebugUIDrawerBitField : DebugUIDrawer
+    public sealed class DebugUIDrawerBitField : DebugUIFieldDrawer<Enum, DebugUI.BitField, DebugStateFlags>
     {
         /// <summary>
-        /// OnGUI implementation for Bitfield DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override Enum DoGUI(Rect rect, GUIContent label, DebugUI.BitField field, DebugStateFlags state)
         {
-            var w = Cast<DebugUI.BitField>(widget);
-            var s = Cast<DebugStateFlags>(state);
-
-            EditorGUI.BeginChangeCheck();
-            Enum value = w.GetValue();
-            var rect = PrepareControlRect();
+            Enum value = field.GetValue();
 
             // Skip first element (with value 0) because EditorGUI.MaskField adds a 'Nothing' field anyway
-            var enumNames = new string[w.enumNames.Length - 1];
+            var enumNames = new string[field.enumNames.Length - 1];
             for (int i = 0; i < enumNames.Length; i++)
-                enumNames[i] = w.enumNames[i + 1].text;
-            var index = EditorGUI.MaskField(rect, EditorGUIUtility.TrTextContent(w.displayName), (int)Convert.ToInt32(value), enumNames);
+                enumNames[i] = field.enumNames[i + 1].text;
+            var index = EditorGUI.MaskField(rect, label, (int)Convert.ToInt32(value), enumNames);
             value = Enum.Parse(value.GetType(), index.ToString()) as Enum;
 
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return value;
         }
     }
 
@@ -390,39 +400,62 @@ namespace UnityEditor.Rendering
     [DebugUIDrawer(typeof(DebugUI.Foldout))]
     public sealed class DebugUIDrawerFoldout : DebugUIDrawer
     {
+        const int k_HeaderVerticalMargin = 2;
+
         /// <summary>
-        /// Begin implementation for Foldout DebugUIDrawer.
+        /// Implement this to execute processing before UI rendering.
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
         public override void Begin(DebugUI.Widget widget, DebugState state)
         {
             var w = Cast<DebugUI.Foldout>(widget);
             var s = Cast<DebugStateBool>(state);
 
-            EditorGUI.BeginChangeCheck();
+            GUIStyle style = w.isHeader ? DebugWindow.Styles.foldoutHeaderStyle : EditorStyles.foldout;
+            Rect rect = PrepareControlRect(w.isHeader ? style.fixedHeight : -1, w.isHeader);
 
-            Rect rect = PrepareControlRect();
-            bool value = EditorGUI.Foldout(rect, w.GetValue(), EditorGUIUtility.TrTextContent(w.displayName), true);
+            if (w.isHeader)
+                GUILayout.Space(k_HeaderVerticalMargin);
+
+            bool value = EditorGUI.Foldout(rect, (bool)w.GetValue(), EditorGUIUtility.TrTextContent(w.displayName, w.tooltip), false, style);
+
+            if (w.GetValue() != value)
+                Apply(w, s, value);
+
+            if (w.contextMenuItems != null)
+            {
+                float contextMenuButtonSize = style.fixedHeight;
+                var labelRect = EditorGUI.IndentedRect(GUILayoutUtility.GetRect(0f, /*17f*/ 0f));
+                labelRect.xMax -= 20f + 16 + 5;
+                var contextMenuRect = new Rect(labelRect.xMax + 3f + 16, labelRect.y - contextMenuButtonSize, contextMenuButtonSize, contextMenuButtonSize);
+                if (GUI.Button(contextMenuRect, CoreEditorStyles.contextMenuIcon, CoreEditorStyles.contextMenuStyle))
+                {
+                    var menu = new GenericMenu();
+                    foreach (var item in w.contextMenuItems)
+                    {
+                        menu.AddItem(EditorGUIUtility.TrTextContent(item.displayName), false, () => item.action.Invoke());
+                    }
+                    menu.DropDown(new Rect(new Vector2(contextMenuRect.x, contextMenuRect.yMax), Vector2.zero));
+                }
+            }
 
             Rect drawRect = GUILayoutUtility.GetLastRect();
             if (w.columnLabels != null && value)
             {
-                const int oneColumnWidth = 70;
                 int indent = EditorGUI.indentLevel;
                 EditorGUI.indentLevel = 0; //be at left of rects
                 for (int i = 0; i < w.columnLabels.Length; i++)
                 {
                     var columnRect = drawRect;
-                    columnRect.x += EditorGUIUtility.labelWidth + i * oneColumnWidth;
-                    columnRect.width = oneColumnWidth;
-                    EditorGUI.LabelField(columnRect, w.columnLabels[i] ?? "", EditorStyles.miniBoldLabel);
+                    columnRect.x += EditorGUIUtility.labelWidth + i * DebugWindow.Styles.foldoutColumnWidth;
+                    columnRect.width = DebugWindow.Styles.foldoutColumnWidth;
+                    string label = w.columnLabels[i] ?? "";
+                    string tooltip = w.columnTooltips?.ElementAtOrDefault(i) ?? "";
+                    EditorGUI.LabelField(columnRect, EditorGUIUtility.TrTextContent(label, tooltip), EditorStyles.miniBoldLabel);
                 }
                 EditorGUI.indentLevel = indent;
             }
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
 
             EditorGUI.indentLevel++;
         }
@@ -435,8 +468,8 @@ namespace UnityEditor.Rendering
         /// <returns>The state of the widget.</returns>
         public override bool OnGUI(DebugUI.Widget widget, DebugState state)
         {
-            var s = Cast<DebugStateBool>(state);
-            return s.value;
+            var w = Cast<DebugUI.Foldout>(widget);
+            return w.opened;
         }
 
         /// <summary>
@@ -447,6 +480,9 @@ namespace UnityEditor.Rendering
         public override void End(DebugUI.Widget widget, DebugState state)
         {
             EditorGUI.indentLevel--;
+            var w = Cast<DebugUI.Foldout>(widget);
+            if (w.isHeader)
+                GUILayout.Space(k_HeaderVerticalMargin);
         }
     }
 
@@ -454,28 +490,19 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Color Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.ColorField))]
-    public sealed class DebugUIDrawerColorField : DebugUIDrawer
+    public sealed class DebugUIDrawerColorField : DebugUIFieldDrawer<Color, DebugUI.ColorField, DebugStateColor>
     {
         /// <summary>
-        /// OnGUI implementation for Color DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override Color DoGUI(Rect rect, GUIContent label, DebugUI.ColorField field, DebugStateColor state)
         {
-            var w = Cast<DebugUI.ColorField>(widget);
-            var s = Cast<DebugStateColor>(state);
-
-            EditorGUI.BeginChangeCheck();
-
-            var rect = PrepareControlRect();
-            var value = EditorGUI.ColorField(rect, EditorGUIUtility.TrTextContent(w.displayName), w.GetValue(), w.showPicker, w.showAlpha, w.hdr);
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return EditorGUI.ColorField(rect, label, field.GetValue(), field.showPicker, field.showAlpha, field.hdr);
         }
     }
 
@@ -483,27 +510,19 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Vector2 Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.Vector2Field))]
-    public sealed class DebugUIDrawerVector2Field : DebugUIDrawer
+    public sealed class DebugUIDrawerVector2Field : DebugUIFieldDrawer<Vector2, DebugUI.Vector2Field, DebugStateVector2>
     {
         /// <summary>
-        /// OnGUI implementation for Vector2 DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override Vector2 DoGUI(Rect rect, GUIContent label, DebugUI.Vector2Field field, DebugStateVector2 state)
         {
-            var w = Cast<DebugUI.Vector2Field>(widget);
-            var s = Cast<DebugStateVector2>(state);
-
-            EditorGUI.BeginChangeCheck();
-
-            var value = EditorGUILayout.Vector2Field(w.displayName, w.GetValue());
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return EditorGUILayout.Vector2Field(label, field.GetValue());
         }
     }
 
@@ -511,27 +530,19 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Vector3 Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.Vector3Field))]
-    public sealed class DebugUIDrawerVector3Field : DebugUIDrawer
+    public sealed class DebugUIDrawerVector3Field : DebugUIFieldDrawer<Vector3, DebugUI.Vector3Field, DebugStateVector3>
     {
         /// <summary>
-        /// OnGUI implementation for Vector3 DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
-        /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
-        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override Vector3 DoGUI(Rect rect, GUIContent label, DebugUI.Vector3Field field, DebugStateVector3 state)
         {
-            var w = Cast<DebugUI.Vector3Field>(widget);
-            var s = Cast<DebugStateVector3>(state);
-
-            EditorGUI.BeginChangeCheck();
-
-            var value = EditorGUILayout.Vector3Field(w.displayName, w.GetValue());
-
-            if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
-
-            return true;
+            return EditorGUILayout.Vector3Field(label, field.GetValue());
         }
     }
 
@@ -539,25 +550,114 @@ namespace UnityEditor.Rendering
     /// Builtin Drawer for Vector4 Debug Items.
     /// </summary>
     [DebugUIDrawer(typeof(DebugUI.Vector4Field))]
-    public sealed class DebugUIDrawerVector4Field : DebugUIDrawer
+    public sealed class DebugUIDrawerVector4Field : DebugUIFieldDrawer<Vector4, DebugUI.Vector4Field, DebugStateVector4>
     {
         /// <summary>
-        /// OnGUI implementation for Vector4 DebugUIDrawer.
+        /// Does the field of the given type
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override Vector4 DoGUI(Rect rect, GUIContent label, DebugUI.Vector4Field field, DebugStateVector4 state)
+        {
+            return EditorGUILayout.Vector4Field(label, field.GetValue());
+        }
+    }
+
+    /// <summary>
+    /// Builtin Drawer for <see cref="DebugUI.ObjectField"/> items.
+    /// </summary>
+    [DebugUIDrawer(typeof(DebugUI.ObjectField))]
+    public sealed class DebugUIDrawerObjectField : DebugUIFieldDrawer<UnityEngine.Object, DebugUI.ObjectField, DebugStateObject>
+    {
+        /// <summary>
+        /// Does the field of the given type
+        /// </summary>
+        /// <param name="rect">The rect to draw the field</param>
+        /// <param name="label">The label for the field</param>
+        /// <param name="field">The field</param>
+        /// <param name="state">The state</param>
+        /// <returns>The current value from the UI</returns>
+        protected override UnityEngine.Object DoGUI(Rect rect, GUIContent label, DebugUI.ObjectField field, DebugStateObject state)
+        {
+            return EditorGUI.ObjectField(rect, label, field.GetValue(), field.type, true);
+        }
+    }
+
+    /// <summary>
+    /// Builtin Drawer for <see cref="DebugUI.ObjectListField"/> Items.
+    /// </summary>
+    [DebugUIDrawer(typeof(DebugUI.ObjectListField))]
+    public sealed class DebugUIDrawerObjectListField : DebugUIDrawer
+    {
+        /// <summary>
+        /// Implement this to execute UI rendering.
+        /// </summary>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
+        /// <returns>Returns the state of the widget.</returns>
         public override bool OnGUI(DebugUI.Widget widget, DebugState state)
         {
-            var w = Cast<DebugUI.Vector4Field>(widget);
-            var s = Cast<DebugStateVector4>(state);
+            var w = Cast<DebugUI.ObjectListField>(widget);
+            var objects = w.GetValue();
+
+            float height = Math.Max(objects != null ? objects.Length : 0, 1) * DebugWindow.Styles.singleRowHeight;
+            var rect = PrepareControlRect(height);
+
+            rect = EditorGUI.PrefixLabel(rect, EditorGUIUtility.TrTextContent(widget.displayName));
 
             EditorGUI.BeginChangeCheck();
-
-            var value = EditorGUILayout.Vector4Field(w.displayName, w.GetValue());
-
+            DoObjectList(rect, w, objects);
             if (EditorGUI.EndChangeCheck())
-                Apply(w, s, value);
+                Apply(w, state, objects);
+
+            return true;
+        }
+
+        internal static void DoObjectList(Rect rect, DebugUI.ObjectListField widget, UnityEngine.Object[] objects)
+        {
+            if (objects == null || objects.Length == 0)
+            {
+                EditorGUI.LabelField(rect, GUIContent.none, EditorGUIUtility.TrTextContent("Empty"));
+                return;
+            }
+
+            rect.height = EditorGUIUtility.singleLineHeight;
+            for (int i = 0; i < objects.Length; i++)
+            {
+                objects[i] = EditorGUI.ObjectField(rect, GUIContent.none, objects[i], widget.type, true);
+                rect.y += DebugWindow.Styles.singleRowHeight;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builtin Drawer for MessageBox Items.
+    /// </summary>
+    [DebugUIDrawer(typeof(DebugUI.MessageBox))]
+    public sealed class DebugUIDrawerMessageBox : DebugUIDrawer
+    {
+        /// <summary>
+        /// Implement this to execute UI rendering.
+        /// </summary>
+        /// <param name="widget">Widget that is going to be rendered.</param>
+        /// <param name="state">Debug State associated with the Debug Item.</param>
+        /// <returns>Returns the state of the widget.</returns>
+        public override bool OnGUI(DebugUI.Widget widget, DebugState state)
+        {
+            var w = Cast<DebugUI.MessageBox>(widget);
+
+            var type = w.style switch
+            {
+                DebugUI.MessageBox.Style.Info => MessageType.Info,
+                DebugUI.MessageBox.Style.Warning => MessageType.Warning,
+                DebugUI.MessageBox.Style.Error => MessageType.Error,
+                _ => MessageType.None
+            };
+
+            EditorGUILayout.HelpBox(w.displayName, type);
 
             return true;
         }
@@ -570,22 +670,23 @@ namespace UnityEditor.Rendering
     public sealed class DebugUIDrawerContainer : DebugUIDrawer
     {
         /// <summary>
-        /// Begin implementation for Container DebugUIDrawer.
+        /// Implement this to execute processing before UI rendering.
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
         public override void Begin(DebugUI.Widget widget, DebugState state)
         {
-            if (!string.IsNullOrEmpty(widget.displayName))
-                EditorGUILayout.LabelField(widget.displayName, EditorStyles.boldLabel);
+            var w = Cast<DebugUI.Container>(widget);
+            if (!w.hideDisplayName)
+                EditorGUILayout.LabelField(EditorGUIUtility.TrTextContent(widget.displayName, widget.tooltip), EditorStyles.boldLabel);
 
             EditorGUI.indentLevel++;
         }
 
         /// <summary>
-        /// End implementation for Container DebugUIDrawer.
+        /// Implement this to execute processing after UI rendering.
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
         public override void End(DebugUI.Widget widget, DebugState state)
         {
@@ -600,19 +701,18 @@ namespace UnityEditor.Rendering
     public sealed class DebugUIDrawerHBox : DebugUIDrawer
     {
         /// <summary>
-        /// Begin implementation for Horizontal Box DebugUIDrawer.
+        /// Implement this to execute processing before UI rendering.
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
         public override void Begin(DebugUI.Widget widget, DebugState state)
         {
             EditorGUILayout.BeginHorizontal();
         }
-
         /// <summary>
-        /// End implementation for Horizontal Box DebugUIDrawer.
+        /// Implement this to execute processing after UI rendering.
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
         public override void End(DebugUI.Widget widget, DebugState state)
         {
@@ -627,9 +727,9 @@ namespace UnityEditor.Rendering
     public sealed class DebugUIDrawerVBox : DebugUIDrawer
     {
         /// <summary>
-        /// Begin implementation for Vertical Box DebugUIDrawer.
+        /// Implement this to execute processing before UI rendering.
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
         public override void Begin(DebugUI.Widget widget, DebugState state)
         {
@@ -637,9 +737,9 @@ namespace UnityEditor.Rendering
         }
 
         /// <summary>
-        /// End implementation for Vertical Box DebugUIDrawer.
+        /// Implement this to execute processing after UI rendering.
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
         public override void End(DebugUI.Widget widget, DebugState state)
         {
@@ -654,21 +754,28 @@ namespace UnityEditor.Rendering
     public sealed class DebugUIDrawerTable : DebugUIDrawer
     {
         /// <summary>
-        /// OnGUI implementation for Table DebugUIDrawer.
+        /// Implement this to execute UI rendering.
         /// </summary>
-        /// <param name="widget">DebugUI Widget.</param>
+        /// <param name="widget">Widget that is going to be rendered.</param>
         /// <param name="state">Debug State associated with the Debug Item.</param>
-        /// <returns>The state of the widget.</returns>
+        /// <returns>Returns the state of the widget.</returns>
         public override bool OnGUI(DebugUI.Widget widget, DebugState state)
         {
+            const float k_ScrollBarHeight = 15;
+
             var w = Cast<DebugUI.Table>(widget);
             var header = w.Header;
+            var visible = header.state.visibleColumns;
+
+            float contentHeight = 0.0f;
+            foreach (DebugUI.Table.Row row in w.children)
+                contentHeight += row != null ? GetRowHeight(row, visible) : EditorGUIUtility.singleLineHeight;
 
             // Put some space before the array
             PrepareControlRect(EditorGUIUtility.singleLineHeight * 0.5f);
 
             // Draw an outline around the table
-            var rect = EditorGUI.IndentedRect(PrepareControlRect(header.height + (w.children.Count + 1) * EditorGUIUtility.singleLineHeight));
+            var rect = EditorGUI.IndentedRect(PrepareControlRect(header.height + contentHeight + k_ScrollBarHeight));
             rect = DrawOutline(rect);
 
             // Compute rects
@@ -676,8 +783,7 @@ namespace UnityEditor.Rendering
             var contentRect = new Rect(rect.x, headerRect.yMax, rect.width, rect.height - headerRect.height);
             var viewRect = new Rect(contentRect.x, contentRect.y, header.state.widthOfAllVisibleColumns, contentRect.height);
             var rowRect = contentRect;
-            rowRect.height = EditorGUIUtility.singleLineHeight;
-            viewRect.height -= EditorGUIUtility.singleLineHeight;
+            viewRect.height -= k_ScrollBarHeight;
 
             // Show header
             header.OnGUI(headerRect, Mathf.Max(w.scroll.x, 0f));
@@ -686,31 +792,48 @@ namespace UnityEditor.Rendering
             w.scroll = GUI.BeginScrollView(contentRect, w.scroll, viewRect);
             {
                 var columns = header.state.columns;
-                var visible = header.state.visibleColumns;
                 for (int r = 0; r < w.children.Count; r++)
                 {
                     var row = Cast<DebugUI.Container>(w.children[r]);
                     rowRect.x = contentRect.x;
                     rowRect.width = columns[0].width;
+                    rowRect.height = (row is DebugUI.Table.Row tableRow) ? GetRowHeight(tableRow, visible) : EditorGUIUtility.singleLineHeight;
 
                     rowRect.xMin += 2;
                     rowRect.xMax -= 2;
-                    EditorGUI.LabelField(rowRect, GUIContent.none, EditorGUIUtility.TrTextContent(row.displayName));
+                    EditorGUI.LabelField(rowRect, GUIContent.none, EditorGUIUtility.TrTextContent(row.displayName), DebugWindow.Styles.centeredLeft);
                     rowRect.xMin -= 2;
                     rowRect.xMax += 2;
 
-                    for (int c = 1; c < visible.Length; c++)
+                    using (new EditorGUI.DisabledScope(w.isReadOnly))
                     {
-                        rowRect.x += rowRect.width;
-                        rowRect.width = columns[visible[c]].width;
-                        DisplayChild(rowRect, row.children[visible[c] - 1], w.isReadOnly);
+                        for (int c = 1; c < visible.Length; c++)
+                        {
+                            rowRect.x += rowRect.width;
+                            rowRect.width = columns[visible[c]].width;
+                            if (!row.isHidden)
+                                DisplayChild(rowRect, row.children[visible[c] - 1]);
+                        }
+                        rowRect.y += rowRect.height;
                     }
-                    rowRect.y += rowRect.height;
                 }
             }
             GUI.EndScrollView(false);
 
             return false;
+        }
+
+        internal float GetRowHeight(DebugUI.Table.Row row, int[] visibleColumns)
+        {
+            float height = EditorGUIUtility.singleLineHeight;
+            for (int c = 1; c < visibleColumns.Length; c++)
+            {
+                var child = row.children[visibleColumns[c] - 1] as DebugUI.ObjectListField;
+                if (child == null || child.GetValue() == null)
+                    continue;
+                height = Mathf.Max(height, child.GetValue().Length * DebugWindow.Styles.singleRowHeight);
+            }
+            return height;
         }
 
         internal Rect DrawOutline(Rect rect)
@@ -732,26 +855,42 @@ namespace UnityEditor.Rendering
             return new Rect(rect.x + size, rect.y + size, rect.width - 2 * size, rect.height - 2 * size);
         }
 
-        internal void DisplayChild(Rect rect, DebugUI.Widget child, bool disable)
+        internal void DisplayChild(Rect rect, DebugUI.Widget child)
         {
             rect.xMin += 2;
             rect.xMax -= 2;
-            if (child.GetType() == typeof(DebugUI.Value))
+
+            if (child.isHidden)
             {
-                var widget = Cast<DebugUI.Value>(child);
-                EditorGUI.LabelField(rect, GUIContent.none, EditorGUIUtility.TrTextContent(widget.GetValue().ToString()));
+                EditorGUI.LabelField(rect, "-");
             }
-            else if (child.GetType() == typeof(DebugUI.ColorField))
+            else
             {
-                var widget = Cast<DebugUI.ColorField>(child);
-                using (new EditorGUI.DisabledScope(disable))
+                if (child.GetType() == typeof(DebugUI.Value))
+                {
+                    var widget = Cast<DebugUI.Value>(child);
+                    EditorGUI.LabelField(rect, GUIContent.none, EditorGUIUtility.TrTextContent(widget.GetValue().ToString()));
+                }
+                else if (child.GetType() == typeof(DebugUI.ColorField))
+                {
+                    var widget = Cast<DebugUI.ColorField>(child);
                     EditorGUI.ColorField(rect, GUIContent.none, widget.GetValue(), false, widget.showAlpha, widget.hdr);
-            }
-            else if (child.GetType() == typeof(DebugUI.BoolField))
-            {
-                var widget = Cast<DebugUI.BoolField>(child);
-                using (new EditorGUI.DisabledScope(disable))
+                }
+                else if (child.GetType() == typeof(DebugUI.BoolField))
+                {
+                    var widget = Cast<DebugUI.BoolField>(child);
                     EditorGUI.Toggle(rect, GUIContent.none, widget.GetValue());
+                }
+                else if (child.GetType() == typeof(DebugUI.ObjectField))
+                {
+                    var widget = Cast<DebugUI.ObjectField>(child);
+                    EditorGUI.ObjectField(rect, GUIContent.none, widget.GetValue(), widget.type, true);
+                }
+                else if (child.GetType() == typeof(DebugUI.ObjectListField))
+                {
+                    var widget = Cast<DebugUI.ObjectListField>(child);
+                    DebugUIDrawerObjectListField.DoObjectList(rect, widget, widget.GetValue());
+                }
             }
         }
     }

@@ -4,6 +4,10 @@ using System.Diagnostics;
 using System.Linq;
 using UnityEngine.Assertions;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace UnityEngine.Rendering
 {
     using UnityObject = UnityEngine.Object;
@@ -25,7 +29,7 @@ namespace UnityEngine.Rendering
         /// A reference to the main <see cref="VolumeStack"/>.
         /// </summary>
         /// <seealso cref="VolumeStack"/>
-        public VolumeStack stack { get; private set; }
+        public VolumeStack stack { get; set; }
 
         /// <summary>
         /// The current list of all available types that derive from <see cref="VolumeComponent"/>.
@@ -33,16 +37,81 @@ namespace UnityEngine.Rendering
         [Obsolete("Please use baseComponentTypeArray instead.")]
         public IEnumerable<Type> baseComponentTypes
         {
-            get
-            {
-                return baseComponentTypeArray;
-            }
-            private set
-            {
-                baseComponentTypeArray = value.ToArray();
-            }
+            get => baseComponentTypeArray;
+            private set => baseComponentTypeArray = value.ToArray();
         }
 
+        static readonly Dictionary<Type, List<(string, Type)>> s_SupportedVolumeComponentsForRenderPipeline = new();
+
+        internal static List<(string, Type)> GetSupportedVolumeComponents(Type currentPipelineType)
+        {
+            if (s_SupportedVolumeComponentsForRenderPipeline.TryGetValue(currentPipelineType,
+                out var supportedVolumeComponents))
+                return supportedVolumeComponents;
+
+            supportedVolumeComponents = FilterVolumeComponentTypes(
+                VolumeManager.instance.baseComponentTypeArray, currentPipelineType);
+            s_SupportedVolumeComponentsForRenderPipeline[currentPipelineType] = supportedVolumeComponents;
+
+            return supportedVolumeComponents;
+        }
+
+        static List<(string, Type)> FilterVolumeComponentTypes(Type[] types, Type currentPipelineType)
+        {
+            var volumes = new List<(string, Type)>();
+            foreach (var t in types)
+            {
+                string path = string.Empty;
+
+                var attrs = t.GetCustomAttributes(false);
+
+                bool skipComponent = false;
+
+                // Look for the attributes of this volume component and decide how is added and if it needs to be skipped
+                foreach (var attr in attrs)
+                {
+                    switch (attr)
+                    {
+                        case VolumeComponentMenu attrMenu:
+                        {
+                            path = attrMenu.menu;
+                            if (attrMenu is VolumeComponentMenuForRenderPipeline supportedOn)
+                                skipComponent |= !supportedOn.pipelineTypes.Contains(currentPipelineType);
+                            break;
+                        }
+                        case HideInInspector attrHide:
+                        case ObsoleteAttribute attrDeprecated:
+                            skipComponent = true;
+                            break;
+                    }
+                }
+
+                if (skipComponent)
+                    continue;
+
+                // If no attribute or in case something went wrong when grabbing it, fallback to a
+                // beautified class name
+                if (string.IsNullOrEmpty(path))
+                {
+#if UNITY_EDITOR
+                    path = ObjectNames.NicifyVariableName(t.Name);
+#else
+                    path = t.Name;
+#endif
+                }
+
+
+                volumes.Add((path, t));
+            }
+
+            return volumes
+                .OrderBy(i => i.Item1)
+                .ToList();
+        }
+
+        /// <summary>
+        /// The current list of all available types that derive from <see cref="VolumeComponent"/>.
+        /// </summary>
         public Type[] baseComponentTypeArray { get; private set; }
 
         // Max amount of layers available in Unity
@@ -62,8 +131,24 @@ namespace UnityEngine.Rendering
         // would be error-prone)
         readonly List<VolumeComponent> m_ComponentsDefaultState;
 
+        internal VolumeComponent GetDefaultVolumeComponent(Type volumeComponentType)
+        {
+            foreach (VolumeComponent component in m_ComponentsDefaultState)
+            {
+                if (component.GetType() == volumeComponentType)
+                    return component;
+            }
+
+            return null;
+        }
+
         // Recycled list used for volume traversal
         readonly List<Collider> m_TempColliders;
+
+        // The default stack the volume manager uses.
+        // We cache this as users able to change the stack through code and
+        // we want to be able to switch to the default one through the ResetMainStack() function.
+        VolumeStack m_DefaultStack = null;
 
         VolumeManager()
         {
@@ -75,7 +160,8 @@ namespace UnityEngine.Rendering
 
             ReloadBaseTypes();
 
-            stack = CreateStack();
+            m_DefaultStack = CreateStack();
+            stack = m_DefaultStack;
         }
 
         /// <summary>
@@ -88,8 +174,17 @@ namespace UnityEngine.Rendering
         public VolumeStack CreateStack()
         {
             var stack = new VolumeStack();
-            stack.Reload(baseComponentTypeArray);
+            stack.Reload(m_ComponentsDefaultState);
             return stack;
+        }
+
+        /// <summary>
+        /// Resets the main stack to be the default one.
+        /// Call this function if you've assigned the main stack to something other than the default one.
+        /// </summary>
+        public void ResetMainStack()
+        {
+            stack = m_DefaultStack;
         }
 
         /// <summary>
@@ -111,10 +206,12 @@ namespace UnityEngine.Rendering
             baseComponentTypeArray = CoreUtils.GetAllTypesDerivedFrom<VolumeComponent>()
                 .Where(t => !t.IsAbstract).ToArray();
 
+            var flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
             // Keep an instance of each type to be used in a virtual lowest priority global volume
             // so that we have a default state to fallback to when exiting volumes
             foreach (var type in baseComponentTypeArray)
             {
+                type.GetMethod("Init", flags)?.Invoke(null, null);
                 var inst = (VolumeComponent)ScriptableObject.CreateInstance(type);
                 m_ComponentsDefaultState.Add(inst);
             }
@@ -218,8 +315,10 @@ namespace UnityEngine.Rendering
         // Go through all listed components and lerp overridden values in the global state
         void OverrideData(VolumeStack stack, List<VolumeComponent> components, float interpFactor)
         {
-            foreach (var component in components)
+            var numComponents = components.Count;
+            for (int i = 0; i < numComponents; i++)
             {
+                var component = components[i];
                 if (!component.active)
                     continue;
 
@@ -229,21 +328,16 @@ namespace UnityEngine.Rendering
         }
 
         // Faster version of OverrideData to force replace values in the global state
-        void ReplaceData(VolumeStack stack, List<VolumeComponent> components)
+        internal void ReplaceData(VolumeStack stack)
         {
-            foreach (var component in components)
+            var resetParameters = stack.defaultParameters;
+            var resetParametersCount = resetParameters.Length;
+            for (int i = 0; i < resetParametersCount; i++)
             {
-                var target = stack.GetComponent(component.GetType());
-                int count = component.parameters.Count;
-
-                for (int i = 0; i < count; i++)
-                {
-                    if(target.parameters[i] != null)
-                    {
-                        target.parameters[i].overrideState = false;
-                        target.parameters[i].SetValue(component.parameters[i]);
-                    }
-                }
+                var resetParam = resetParameters[i];
+                var targetParam = resetParam.parameter;
+                targetParam.overrideState = false;
+                targetParam.SetValue(resetParam.defaultValue);
             }
         }
 
@@ -273,7 +367,7 @@ namespace UnityEngine.Rendering
 
             if (components == null)
             {
-                stack.Reload(baseComponentTypeArray);
+                stack.Reload(m_ComponentsDefaultState);
                 return;
             }
 
@@ -281,10 +375,31 @@ namespace UnityEngine.Rendering
             {
                 if (kvp.Key == null || kvp.Value == null)
                 {
-                    stack.Reload(baseComponentTypeArray);
+                    stack.Reload(m_ComponentsDefaultState);
                     return;
                 }
             }
+        }
+
+        // Returns true if must execute Update() in full, and false if we can early exit.
+        bool CheckUpdateRequired(VolumeStack stack)
+        {
+            if (m_Volumes.Count == 0)
+            {
+                if (stack.requiresReset)
+                {
+                    // Update the stack one more time in case there was a volume that just ceased to exist. This ensures
+                    // the stack will return to default values correctly.
+                    stack.requiresReset = false;
+                    return true;
+                }
+
+                // There were no volumes last frame either, and stack has been returned to defaults, so no update is
+                // needed and we can early exit from Update().
+                return false;
+            }
+            stack.requiresReset = true; // Stack must be reset every frame whenever there are volumes present
+            return true;
         }
 
         /// <summary>
@@ -316,8 +431,11 @@ namespace UnityEngine.Rendering
             CheckBaseTypes();
             CheckStack(stack);
 
+            if (!CheckUpdateRequired(stack))
+                return;
+
             // Start by resetting the global state to default values
-            ReplaceData(stack, m_ComponentsDefaultState);
+            ReplaceData(stack);
 
             bool onlyGlobal = trigger == null;
             var triggerPos = onlyGlobal ? Vector3.zero : trigger.position;
@@ -331,8 +449,13 @@ namespace UnityEngine.Rendering
                 trigger.TryGetComponent<Camera>(out camera);
 
             // Traverse all volumes
-            foreach (var volume in volumes)
+            int numVolumes = volumes.Count;
+            for (int i = 0; i < numVolumes; i++)
             {
+                Volume volume = volumes[i];
+                if (volume == null)
+                    continue;
+
 #if UNITY_EDITOR
                 // Skip volumes that aren't in the scene currently displayed in the scene view
                 if (!IsVolumeRenderedByCamera(volume, camera))
@@ -362,8 +485,10 @@ namespace UnityEngine.Rendering
                 // Find closest distance to volume, 0 means it's inside it
                 float closestDistanceSqr = float.PositiveInfinity;
 
-                foreach (var collider in colliders)
+                int numColliders = colliders.Count;
+                for (int c = 0; c < numColliders; c++)
                 {
+                    var collider = colliders[c];
                     if (!collider.enabled)
                         continue;
 
@@ -403,6 +528,7 @@ namespace UnityEngine.Rendering
         public Volume[] GetVolumes(LayerMask layerMask)
         {
             var volumes = GrabVolumes(layerMask);
+            volumes.RemoveAll(v => v == null);
             return volumes.ToArray();
         }
 
@@ -416,8 +542,10 @@ namespace UnityEngine.Rendering
                 // to this mask in it
                 list = new List<Volume>();
 
-                foreach (var volume in m_Volumes)
+                var numVolumes = m_Volumes.Count;
+                for (int i = 0; i < numVolumes; i++)
                 {
+                    var volume = m_Volumes[i];
                     if ((mask & (1 << volume.gameObject.layer)) == 0)
                         continue;
 
@@ -463,6 +591,9 @@ namespace UnityEngine.Rendering
         static bool IsVolumeRenderedByCamera(Volume volume, Camera camera)
         {
 #if UNITY_2018_3_OR_NEWER && UNITY_EDITOR
+            // GameObject for default global volume may not belong to any scene, following check prevents it from being culled
+            if (!volume.gameObject.scene.IsValid())
+                return true;
             // IsGameObjectRenderedByCamera does not behave correctly when camera is null so we have to catch it here.
             return camera == null ? true : UnityEditor.SceneManagement.StageUtility.IsGameObjectRenderedByCamera(volume.gameObject, camera);
 #else
@@ -481,11 +612,11 @@ namespace UnityEngine.Rendering
         /// Constructs a scope in which a Camera filters a Volume.
         /// </summary>
         /// <param name="unused">Unused parameter.</param>
-        public VolumeIsolationScope(bool unused) {}
+        public VolumeIsolationScope(bool unused) { }
 
         /// <summary>
         /// Stops the Camera from filtering a Volume.
         /// </summary>
-        void IDisposable.Dispose() {}
+        void IDisposable.Dispose() { }
     }
 }

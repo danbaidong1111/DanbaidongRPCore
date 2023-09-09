@@ -7,7 +7,7 @@ namespace UnityEngine.Rendering
     /// <summary>
     /// An Asset which holds a set of settings to use with a <see cref="Volume"/>.
     /// </summary>
-    [HelpURL(Documentation.baseURLHDRP + Documentation.version + Documentation.subURL + "Volume-Profile" + Documentation.endURL)]
+    [CoreRPHelpURL("Volume-Profile", "com.unity.render-pipelines.high-definition")]
     public sealed class VolumeProfile : ScriptableObject
     {
         /// <summary>
@@ -16,6 +16,7 @@ namespace UnityEngine.Rendering
         public List<VolumeComponent> components = new List<VolumeComponent>();
 
         /// <summary>
+        /// **Note**: For Internal Use Only<br/>
         /// A dirty check used to redraw the profile inspector when something has changed. This is
         /// currently only used in the editor.
         /// </summary>
@@ -30,6 +31,21 @@ namespace UnityEngine.Rendering
             // harmless and happens because Unity does a redraw of the editor (and thus the current
             // frame) before the recompilation step.
             components.RemoveAll(x => x == null);
+        }
+
+        // The lifetime of ScriptableObjects is different from MonoBehaviours. When the last reference to a
+        // VolumeProfile goes out of scope (e.g. when a scene containing Volume components is unloaded), Unity will call
+        // OnDisable() on the VolumeProfile. We need to release the internal resources in this case to avoid leaks.
+        internal void OnDisable()
+        {
+            if (components == null)
+               return;
+               
+            for (int i = 0; i < components.Count; i++)
+            {
+                if (components[i] != null)
+                    components[i].Release();
+            }
         }
 
         /// <summary>
@@ -284,7 +300,6 @@ namespace UnityEngine.Rendering
             return count != result.Count;
         }
 
-
         /// <summary>
         /// A custom hashing function that Unity uses to compare the state of parameters.
         /// </summary>
@@ -313,6 +328,16 @@ namespace UnityEngine.Rendering
 
                 return hash;
             }
+        }
+
+        /// <summary>
+        /// Removes any components that were destroyed externally from the iternal list of components
+        /// </summary>
+        internal void Sanitize()
+        {
+            for (int i = components.Count - 1; i >= 0; i--)
+                if (components[i] == null)
+                    components.RemoveAt(i);
         }
     }
 }

@@ -94,7 +94,7 @@ namespace UnityEditor.Rendering.LookDev
                 m_SavedRelativePositionOnMouseDown = GetNormalizedCoordinates(evt.localMousePosition, displayRect) - m_State.center;
                 isDragging = true;
                 //We do not want to move camera and gizmo at the same time.
-                evt.StopImmediatePropagation(); 
+                evt.StopImmediatePropagation();
             }
             else
             {
@@ -103,7 +103,7 @@ namespace UnityEditor.Rendering.LookDev
                     m_Switcher.SwitchUntilNextEndOfDrag();
             }
         }
-        
+
         void OnMouseUp(MouseUpEvent evt)
         {
             if (LookDev.currentContext.layout.viewLayout != Layout.CustomSplit
@@ -129,11 +129,11 @@ namespace UnityEditor.Rendering.LookDev
 
             switch (m_Selected)
             {
-                case Selected.PlaneSeparator:   OnDragPlaneSeparator(evt);      break;
-                case Selected.NodeFirstView: 
-                case Selected.NodeSecondView:   OnDragPlaneNodeExtremity(evt);  break;
-                case Selected.Fader:            OnDragFader(evt);               break;
-                default:    throw new ArgumentException("Unknown kind of Selected");
+                case Selected.PlaneSeparator: OnDragPlaneSeparator(evt); break;
+                case Selected.NodeFirstView:
+                case Selected.NodeSecondView: OnDragPlaneNodeExtremity(evt); break;
+                case Selected.Fader: OnDragFader(evt); break;
+                default: throw new ArgumentException("Unknown kind of Selected");
             }
         }
 
@@ -152,7 +152,7 @@ namespace UnityEditor.Rendering.LookDev
             //We do not want to move camera and gizmo at the same time.
             evt.StopImmediatePropagation();
         }
-        
+
         void OnDragPlaneNodeExtremity(MouseMoveEvent evt)
         {
             Vector2 normalizedCoord = GetNormalizedCoordinates(evt.localMousePosition, target.contentRect);

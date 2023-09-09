@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using UnityEngine.Assertions;
 
 namespace UnityEngine.Rendering
@@ -80,17 +83,15 @@ namespace UnityEngine.Rendering
             /// Set the value of the field.
             /// </summary>
             /// <param name="value">Input value.</param>
-            public void SetValue(T value)
+            public virtual void SetValue(T value)
             {
                 Assert.IsNotNull(setter);
                 var v = ValidateValue(value);
 
-                if (!v.Equals(getter()))
+                if (v == null || !v.Equals(getter()))
                 {
                     setter(v);
-
-                    if (onValueChanged != null)
-                        onValueChanged(this, v);
+                    onValueChanged?.Invoke(this, v);
                 }
             }
         }
@@ -242,21 +243,72 @@ namespace UnityEngine.Rendering
         }
 
         /// <summary>
-        /// Enumerator field.
+        /// Generic <see cref="EnumField"/> that stores enumNames and enumValues
         /// </summary>
-        public class EnumField : Field<int>
+        /// <typeparam name="T">The inner type of the field</typeparam>
+        public abstract class EnumField<T> : Field<T>
         {
             /// <summary>
             /// List of names of the enumerator entries.
             /// </summary>
             public GUIContent[] enumNames;
+
+            private int[] m_EnumValues;
+
             /// <summary>
             /// List of values of the enumerator entries.
             /// </summary>
-            public int[] enumValues;
+            public int[] enumValues
+            {
+                get => m_EnumValues;
+                set
+                {
+                    if (value?.Distinct().Count() != value?.Count())
+                        Debug.LogWarning($"{displayName} - The values of the enum are duplicated, this might lead to a errors displaying the enum");
+                    m_EnumValues = value;
+                }
+            }
 
+
+            // Space-delimit PascalCase (https://stackoverflow.com/questions/155303/net-how-can-you-split-a-caps-delimited-string-into-an-array)
+            static Regex s_NicifyRegEx = new("([a-z](?=[A-Z])|[A-Z](?=[A-Z][a-z]))", RegexOptions.Compiled);
+
+            /// <summary>
+            /// Automatically fills the enum names with a given <see cref="Type"/>
+            /// </summary>
+            /// <param name="enumType">The enum type</param>
+            protected void AutoFillFromType(Type enumType)
+            {
+                if (enumType == null || !enumType.IsEnum)
+                    throw new ArgumentException($"{nameof(enumType)} must not be null and it must be an Enum type");
+
+                using (ListPool<GUIContent>.Get(out var tmpNames))
+                using (ListPool<int>.Get(out var tmpValues))
+                {
+                    var enumEntries = enumType.GetFields(BindingFlags.Public | BindingFlags.Static)
+                        .Where(fieldInfo => !fieldInfo.IsDefined(typeof(ObsoleteAttribute)) && !fieldInfo.IsDefined(typeof(HideInInspector)));
+                    foreach (var fieldInfo in enumEntries)
+                    {
+                        var description = fieldInfo.GetCustomAttribute<InspectorNameAttribute>();
+                        var displayName = new GUIContent(description == null ? s_NicifyRegEx.Replace(fieldInfo.Name, "$1 ") : description.displayName);
+                        tmpNames.Add(displayName);
+                        tmpValues.Add((int)Enum.Parse(enumType, fieldInfo.Name));
+                    }
+                    enumNames = tmpNames.ToArray();
+                    enumValues = tmpValues.ToArray();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Enumerator field.
+        /// </summary>
+        public class EnumField : EnumField<int>
+        {
             internal int[] quickSeparators;
-            internal int[] indexes;
+
+            private int[] m_Indexes;
+            internal int[] indexes => m_Indexes ??= Enumerable.Range(0, enumNames?.Length ?? 0).ToArray();
 
             /// <summary>
             /// Get the enumeration value index.
@@ -270,7 +322,11 @@ namespace UnityEngine.Rendering
             /// <summary>
             /// Current enumeration value index.
             /// </summary>
-            public int currentIndex { get { return getIndex(); } set { setIndex(value); } }
+            public int currentIndex
+            {
+                get => getIndex();
+                set => setIndex(value);
+            }
 
             /// <summary>
             /// Generates enumerator values and names automatically based on the provided type.
@@ -279,17 +335,7 @@ namespace UnityEngine.Rendering
             {
                 set
                 {
-                    enumNames = Enum.GetNames(value).Select(x => new GUIContent(x)).ToArray();
-
-                    // Linq.Cast<T> on a typeless Array breaks the JIT on PS4/Mono so we have to do it manually
-                    //enumValues = Enum.GetValues(value).Cast<int>().ToArray();
-
-                    var values = Enum.GetValues(value);
-                    enumValues = new int[values.Length];
-                    for (int i = 0; i < values.Length; i++)
-                        enumValues[i] = (int)values.GetValue(i);
-
-                    InitIndexes();
+                    AutoFillFromType(value);
                     InitQuickSeparators();
                 }
             }
@@ -318,17 +364,38 @@ namespace UnityEngine.Rendering
                 }
             }
 
-            internal void InitIndexes()
+            /// <summary>
+            /// Set the value of the field.
+            /// </summary>
+            /// <param name="value">Input value.</param>
+            public override void SetValue(int value)
             {
-                if (enumNames == null)
-                    enumNames = new GUIContent[0];
+                Assert.IsNotNull(setter);
+                var validValue = ValidateValue(value);
 
-                indexes = new int[enumNames.Length];
-                for (int i = 0; i < enumNames.Length; i++)
+                // There might be cases that the value does not map the index, look for the correct index
+                var newCurrentIndex = Array.IndexOf(enumValues, validValue);
+
+                if (currentIndex != newCurrentIndex && !validValue.Equals(getter()))
                 {
-                    indexes[i] = i;
+                    setter(validValue);
+                    onValueChanged?.Invoke(this, validValue);
+
+                    if (newCurrentIndex > -1)
+                        currentIndex = newCurrentIndex;
                 }
             }
+        }
+
+        /// <summary>
+        /// Object PopupField
+        /// </summary>
+        public class ObjectPopupField : Field<Object>
+        {
+            /// <summary>
+            /// Callback to obtain the elemtents of the pop up
+            /// </summary>
+            public Func<IEnumerable<Object>> getObjects { get; set; }
         }
 
         /// <summary>
@@ -361,40 +428,21 @@ namespace UnityEngine.Rendering
         /// <summary>
         /// Bitfield enumeration field.
         /// </summary>
-        public class BitField : Field<Enum>
+        public class BitField : EnumField<Enum>
         {
-            /// <summary>
-            /// List of names of the enumerator entries.
-            /// </summary>
-            public GUIContent[] enumNames { get; private set; }
-            /// <summary>
-            /// List of values of the enumerator entries.
-            /// </summary>
-            public int[] enumValues { get; private set; }
-
-            internal Type m_EnumType;
+            Type m_EnumType;
 
             /// <summary>
             /// Generates bitfield values and names automatically based on the provided type.
             /// </summary>
             public Type enumType
             {
+                get => m_EnumType;
                 set
                 {
-                    enumNames = Enum.GetNames(value).Select(x => new GUIContent(x)).ToArray();
-
-                    // Linq.Cast<T> on a typeless Array breaks the JIT on PS4/Mono so we have to do it manually
-                    //enumValues = Enum.GetValues(value).Cast<int>().ToArray();
-
-                    var values = Enum.GetValues(value);
-                    enumValues = new int[values.Length];
-                    for (int i = 0; i < values.Length; i++)
-                        enumValues[i] = (int)values.GetValue(i);
-
                     m_EnumType = value;
+                    AutoFillFromType(value);
                 }
-
-                get { return m_EnumType; }
             }
         }
 
@@ -509,6 +557,58 @@ namespace UnityEngine.Rendering
             /// Number of decimals.
             /// </summary>
             public int decimals = 3;
+        }
+
+        /// <summary>
+        /// Object field.
+        /// </summary>
+        public class ObjectField : Field<Object>
+        {
+            /// <summary>
+            /// Object type.
+            /// </summary>
+            public Type type = typeof(Object);
+        }
+
+        /// <summary>
+        /// Object list field.
+        /// </summary>
+        public class ObjectListField : Field<Object[]>
+        {
+            /// <summary>
+            /// Objects type.
+            /// </summary>
+            public Type type = typeof(Object);
+        }
+
+        /// <summary>
+        /// Simple message box widget, providing a couple of different styles.
+        /// </summary>
+        public class MessageBox : Widget
+        {
+            /// <summary>
+            /// Label style defines text color and background.
+            /// </summary>
+            public enum Style
+            {
+                /// <summary>
+                /// Info category
+                /// </summary>
+                Info,
+                /// <summary>
+                /// Warning category
+                /// </summary>
+                Warning,
+                /// <summary>
+                /// Error category
+                /// </summary>
+                Error
+            }
+
+            /// <summary>
+            /// Style used to render displayName.
+            /// </summary>
+            public Style style = Style.Info;
         }
     }
 }

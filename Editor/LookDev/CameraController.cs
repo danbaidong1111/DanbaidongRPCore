@@ -280,7 +280,7 @@ namespace UnityEditor.Rendering.LookDev
             if (GetKeyCombinationByID("3D Viewport/Fly Mode Down", out combination) && combination.Match(evt))
                 RegisterMotionChange(Direction.Down, evt);
         }
-        
+
         void RegisterMotionChange<T>(Direction direction, KeyboardEventBase<T> evt)
             where T : KeyboardEventBase<T>, new()
         {

@@ -8,18 +8,16 @@ All operations related to `RTHandles` require an instance of the `RTHandleSystem
 
 ```c#
 RTHandleSystem m_RTHandleSystem = new RTHandleSystem();
-m_RTHandleSystem.Initialize(Screen.width, Screen.height, scaledRTsupportsMSAA: true, scaledRTMSAASamples: MSAASamples.MSAA4x);
+m_RTHandleSystem.Initialize(Screen.width, Screen.height);
 ```
 When you initialize the system, you must supply the starting resolution. The above code example uses the width and height of the screen. Because the RTHandle system only reallocates render textures when a Camera requires a resolution larger than the current maximum size, the internal `RTHandle` resolution can only increase from the value you pass in here. It is good practice to initialize this resolution to be the resolution of the main display. This means the system does not need to unnecessarily reallocate the render textures (and cause unwanted memory spikes) at the beginning of the application.
-
-If you want to use multi-sample anti-aliasing (MSAA), you must declare the MSAA sample mode during initialization. In the example code above, the RTHandle system supports MSAA and uses the MSAA4x mode. The RTHandle system allocates all textures with the same number of samples. You can change the sample mode later, but this changes the sample mode for all automatically resized textures.
 
 You must only call the `Initialize` function once at the beginning of the application. After this, you can use the initialized instance to allocate textures.
 
 Because you allocate the majority of `RTHandles` from the same `RTHandleSystem` instance, the RTHandle system also provides a default global instance through the `RTHandles` static class. Rather than maintain your own instance of `RTHandleSystem`, this allows you to use the same API that you get with an instance, but not worry about the lifetime of the instance. Using the static instance, the initialization becomes this:
 
 ```c#
-RTHandles.Initialize(Screen.width, Screen.height, scaledRTsupportsMSAA: true, scaledRTMSAASamples: MSAASamples.MSAA4x);
+RTHandles.Initialize(Screen.width, Screen.height);
 ```
 
 The code examples in the rest of this page use the default global instance.
@@ -29,7 +27,7 @@ The code examples in the rest of this page use the default global instance.
 Before rendering with a Camera, you need to set the resolution the RTHandle system uses as a reference size. To do so, call the `SetReferenceSize` function.
 
 ```c#
-RTHandles.SetReferenceSize(width, hight, msaaSamples);
+RTHandles.SetReferenceSize(width, height);
 ```
 
 Calling this function has two effects:
@@ -49,7 +47,7 @@ There are three main ways to allocate an `RTHandle`. They all use the same `Allo
 
 There are also overrides that create RTHandles from [RenderTargetIdentifier](https://docs.unity3d.com/ScriptReference/Rendering.RenderTargetIdentifier.html). [RenderTextures](https://docs.unity3d.com/ScriptReference/RenderTexture.html), or [Textures](https://docs.unity3d.com/Manual/Textures.html). These are useful when you want to use the RTHandle API to interact with all your textures, even though the texture might not be an actual `RTHandle`.
 
-The following code sample contains example uses of the `Alloc` function: 
+The following code sample contains example uses of the `Alloc` function:
 
 ```c#
 // Simple Scale
@@ -67,7 +65,7 @@ RTHandle rtHandleUsingFunctor = RTHandles.Alloc(ComputeRTHandleSize, colorFormat
 RTHandle fixedSize = RTHandles.Alloc(256, 256, colorFormat: GraphicsFormat.R8G8B8A8_UNorm, dimension: TextureDimension.Tex2D);
 ```
 
-When you no longer need a particular RTHande, you can release it. To do this, call the `Release` method.
+When you no longer need a particular RTHandle, you can release it. To do this, call the `Release` method.
 
 ```c#
 myRTHandle.Release();
@@ -90,7 +88,7 @@ This example is one of many different overrides for the `SetRenderTarget` functi
 
 ## Using RTHandles in shaders
 
-When you sample from a full-screen render texture in a shader in the usual way, UVs span the whole 0 to 1 range. This is not always the case with `RTHandles`. The current rendering might only occur in a partial viewport. To take this into account, you must apply a scale to UVs when you sample `RTHandles` that use a scale. All the information necessary to handle `RTHandles` specificity inside shaders is in the `RTHandeProperties` structure that the `RTHandleSystem` instance provides. To access it, use:
+When you sample from a full-screen render texture in a shader in the usual way, UVs span the whole 0 to 1 range. This is not always the case with `RTHandles`. The current rendering might only occur in a partial viewport. To take this into account, you must apply a scale to UVs when you sample `RTHandles` that use a scale. All the information necessary to handle `RTHandles` specificity inside shaders is in the `RTHandleProperties` structure that the `RTHandleSystem` instance provides. To access it, use:
 
 ```c#
 RTHandleProperties rtHandleProperties = RTHandles.rtHandleProperties;
@@ -105,7 +103,7 @@ public struct RTHandleProperties
     public Vector2Int previousRenderTargetSize;
     public Vector2Int currentViewportSize;
     public Vector2Int currentRenderTargetSize;
-	public Vector4 rtHandleScale;
+    public Vector4 rtHandleScale;
 }
 ```
 
@@ -131,7 +129,7 @@ There are no shader constants provided by default with SRP. So, when you use RTH
 
 ## Camera specific RTHandles
 
-Most of the render textures that a rendering loop uses can be shared by all Cameras. If their content does not need to carry from one frame to another, this is fine. However, some render textures need persistence. A good example of this is using the main color buffer in subsequent frames for Temporal Anti-aliasing. This means that the Camera cannot share its RTHandle with other Cameras. Most of the time, this also means that these RTHandles must be at least double-buffered (written to during the current frame, read from during the previous frame). To address this problem, the RTHandle system includes `BufferedRTHandleSystems`. 
+Most of the render textures that a rendering loop uses can be shared by all Cameras. If their content does not need to carry from one frame to another, this is fine. However, some render textures need persistence. A good example of this is using the main color buffer in subsequent frames for Temporal Anti-aliasing. This means that the Camera cannot share its RTHandle with other Cameras. Most of the time, this also means that these RTHandles must be at least double-buffered (written to during the current frame, read from during the previous frame). To address this problem, the RTHandle system includes `BufferedRTHandleSystems`.
 
 A `BufferedRTHandleSystem` is an `RTHandleSystem` that can multi-buffer RTHandles. The principle is to identify a buffer by a unique ID and provide APIs to allocate a number of instances of the same buffer then retrieve them from previous frames. These are history buffers. Usually, you must allocate one `BufferedRTHandleSystem` for each Camera. Each one owns their Camera-specific RTHandles.
 
@@ -166,7 +164,7 @@ public void ReleaseBuffer(int bufferId);
 In the same way that you provide the reference size for regular `RTHandleSystems`, you must do this for each instance of `BufferedRTHandleSystem`.
 
 ```c#
-public void SwapAndSetReferenceSize(int width, int height, MSAASamples msaaSamples);
+public void SwapAndSetReferenceSize(int width, int height);
 ```
 
 This works the same way as regular RTHandleSystem but it also swaps the buffers internally so that the 0 index for `GetFrameRT` still references the current frame buffer. This slightly different way of handling Camera-specific buffers also has implications when you write shader code.
