@@ -130,7 +130,7 @@ real3 GetSpecularDominantDir(real3 N, real3 R, real perceptualRoughness, real Nd
 // This paper further improves the method of Dupuy and Benyoub in the case where the microfacet normal is used for reflection only.
 // It allows many fewer rays to be rejected at high roughness which improves quality. This is particularly noticeable
 // in multi-bounce reflections of rough metals because longer paths can be followed without early termination.
-#define GGX_BOUNDED_VNDF_SAMPLING 0
+#define GGX_BOUNDED_VNDF_SAMPLING 1
 #endif
 
 float VisibleGGXPDF(float3 V, float3 H, float a2, bool bLimitVDNFToReflection = true)
