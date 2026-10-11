@@ -82,6 +82,19 @@ namespace UnityEngine.Rendering
         }
 
         /// <summary>
+        /// Reallocates only the current frame, preserving all previous frames.
+        /// </summary>
+        /// <param name="bufferId">The allocated buffer to update.</param>
+        /// <param name="allocator">Allocator for the replacement current frame.</param>
+        public void ReAllocateCurrentBuffer(int bufferId, Func<RTHandleSystem, int, RTHandle> allocator)
+        {
+            var frames = m_RTHandles[bufferId];
+            var replacement = allocator(m_RTHandleSystem, 0);
+            frames[0]?.Release();
+            frames[0] = replacement;
+        }
+
+        /// <summary>
         /// Clears all the previously created history buffers
         /// </summary>
         /// <param name="cmd">Defines the command buffer used for clearing.</param>
