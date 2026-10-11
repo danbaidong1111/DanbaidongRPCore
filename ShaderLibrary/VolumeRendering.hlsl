@@ -68,7 +68,7 @@ real4 LinearizeRGBD(real4 value)
     // We drop redundant negations.
     real d = value.a;
     real a = 1 - exp(-d);
-    real r = (a >= REAL_EPS) ? (d * rcp(a)) : 1; // Prevent numerical explosion
+    real r = (a >= REAL_EPS) ? (d * rcp(max(a, REAL_EPS))) : 1; // Keep the unused branch finite for empty media.
     return real4(r * value.rgb, d);
 }
 
